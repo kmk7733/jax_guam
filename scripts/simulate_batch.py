@@ -24,7 +24,7 @@ def main():
     guam = FuncGUAM()
     logger.info("Calling GUAM...")
 
-    batch_size = 4096
+    batch_size = 1
     # batch_size = 8192
     # batch_size = 16_384
     state = GuamState.create()
@@ -33,8 +33,8 @@ def main():
 
     # Perturb the initial state in the x and y directions.
     key0, key1 = jr.split(jr.PRNGKey(0))
-    b_state.aircraft[:, 6] = jr.uniform(key0, (batch_size,), minval=-20.0, maxval=20.0)
-    b_state.aircraft[:, 7] = jr.uniform(key1, (batch_size,), minval=-20.0, maxval=20.0)
+    b_state.aircraft[:, 6] = jr.uniform(key0, (batch_size,), minval=-0.0, maxval=0.0)
+    b_state.aircraft[:, 7] = jr.uniform(key1, (batch_size,), minval=-0.0, maxval=0.0)
 
     vmap_step = jax.jit(jax.vmap(ft.partial(guam.step, guam.dt), in_axes=(0, None)))
 
@@ -51,8 +51,7 @@ def main():
 
     bT_state = simulate_batch(b_state)
 
-    np.savez("bT_state.npz", aircraft=bT_state.aircraft)
-
+    np.savez("bT_state_before_tune.npz", aircraft=bT_state.aircraft)
 
 if __name__ == "__main__":
     with ipdb.launch_ipdb_on_exception():

@@ -238,6 +238,7 @@ class L_C_control:
         m1 = jnp.transpose(m1)
         X0 = m1[:12]
         U0 = m1[12:]
+        import ipdb; ipdb.set_trace()
         ctrl_sys_lon = self.longtitudinal_ctrl_interpolation(k_1, f_1, k_2, f_2)
         ctrl_sys_lat = self.lateral_ctrl_interpolation(k_1, f_1, k_2, f_2)
         # pdb.set_trace()

@@ -434,7 +434,7 @@ class Ctrl_Sys_Lon(NamedTuple):
     Kv: Mat31
     # Gain for the ref longitudinal state, ONLY USED FOR INTEGRAL COMPUTATION.
     F: Mat3
-    # Gain for the ref longitudinal state, Used for the output.
+    # Gain for the ref longitudinal state, Used for the output. Zeros
     G: Mat3
     # "Negative" Gain for the current longitudinal state, ONLY USED FOR INTEGRAL COMPUTATION.
     C: Mat3_4
@@ -489,6 +489,10 @@ class Alloc(NamedTuple):
     u0: Vec14
     u0_trim: Vec13
     x0_trim: Vec12
+
+    # AGI
+    # W: Mat14
+    # B: Mat6_14
 
 
 class Control(NamedTuple):

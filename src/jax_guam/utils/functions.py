@@ -1,5 +1,6 @@
 import pdb
 
+import jax
 import ipdb
 import jax.numpy as jnp
 import numpy as np
@@ -233,11 +234,26 @@ def matrix_interpolation_np(k_1, f_1, k_2, f_2, table_datas):
     return second
 
 
-def pseudo_inverse(W: Float[Arr, "nu nu"], B: Float[Arr, "3 nu"]) -> Float[Arr, "nu 3"]:
-    """Compute lstsq(W, B^T) * (B W^-1 B^T)^-1"""
-    W_inv = jnp.linalg.inv(W)
-    return (jnp.linalg.lstsq(W, B.T, rcond=None)[0]).dot(jnp.linalg.inv(B.dot(W_inv).dot(B.T)))
+# def pseudo_inverse(W: Float[Arr, "nu nu"], B: Float[Arr, "3 nu"]) -> Float[Arr, "nu 3"]:
+#     """Compute lstsq(W, B^T) * (B W^-1 B^T)^-1"""
+#     W_inv = jnp.linalg.inv(W)
+#     return (jnp.linalg.lstsq(W, B.T, rcond=None)[0]).dot(jnp.linalg.inv(B.dot(W_inv).dot(B.T)))
 
+def pseudo_inverse(W: jnp.ndarray, B: jnp.ndarray) -> jnp.ndarray:
+    """Compute lstsq(W, B^T) * (B W^-1 B^T)^-1"""
+    epsilon = 1e-6  # Regularization parameter to avoid singularity
+
+    # Regularized inverse of W
+    W_inv = jax.scipy.linalg.solve(W + epsilon * jnp.eye(W.shape[0]), jnp.eye(W.shape[0]))
+
+    # Solve the least squares problem (instead of lstsq, which might introduce instability)
+    X = jax.scipy.linalg.solve(W, B.T)
+
+    # Compute the inverse of the regularized matrix B W_inv B^T
+    BWBT_inv = jnp.linalg.inv(B.dot(W_inv).dot(B.T) + epsilon * jnp.eye(B.shape[0]))
+
+    # Final result
+    return X.dot(BWBT_inv)
 
 def pseudo_inverse_np(W: Float[Arr, "nu nu"], B: Float[Arr, "3 nu"]) -> Float[Arr, "nu 3"]:
     """Compute lstsq(W, B^T) * (B W^-1 B^T)^-1"""

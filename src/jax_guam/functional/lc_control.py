@@ -96,6 +96,29 @@ class LCControl:
         self.MIN_POS_ENGINE = np.full((9, 1), -1e-3)
 
     @ft.partial(jax.jit, static_argnums=0)
+    def new_get_control(
+        self, state: LCControlState, sensor: SensorNoAcc, ref_inputs: RefInputs, my_param
+    ) -> tuple[Control, LCDerivCache]:
+        # 1: Compute "mdes" for longitudinal and lateral.
+        XU0, ctrl_sys, mdes, Xlonlat = self.new_baseline(state, sensor, ref_inputs, my_param)
+
+        # 2: (Ignore adaptive)
+
+        # 3: Allocate controls
+        eng_cmd, surf_cmd, feedback, u_alloc = self.pseudo_inverse_control_alloc(XU0, ctrl_sys, mdes)
+        
+        # import pdb; pdb.set_trace()
+        cmd = Cmd(
+            EngineCmd=eng_cmd,
+            EnginePwr=np.ones((9, 1)),
+            CtrlSurfaceCmd=surf_cmd,
+            CtrlSurfacePwr=np.ones((5, 1)),
+            GearCmd=1,
+        )
+        control = Control(Cmd=cmd, Alloc=u_alloc)
+        return control, LCDerivCache(ctrl_sys, feedback, Xlonlat)
+
+    @ft.partial(jax.jit, static_argnums=0)
     def get_control(
         self, state: LCControlState, sensor: SensorNoAcc, ref_inputs: RefInputs
     ) -> tuple[Control, LCDerivCache]:
@@ -106,6 +129,8 @@ class LCControl:
 
         # 3: Allocate controls
         eng_cmd, surf_cmd, feedback, u_alloc = self.pseudo_inverse_control_alloc(XU0, ctrl_sys, mdes)
+        
+        # import pdb; pdb.set_trace()
         cmd = Cmd(
             EngineCmd=eng_cmd,
             EnginePwr=np.ones((9, 1)),
@@ -151,9 +176,15 @@ class LCControl:
         # Last squares thing to allocate control.
         M_lon = pseudo_inverse(ctrl_sys.lon.W, ctrl_sys.lon.B)
         M_lat = pseudo_inverse(ctrl_sys.lat.W, ctrl_sys.lat.B)
+
+        # grad = jax.jacobian(pseudo_inverse, argnums=0)(ctrl_sys.lon.W, ctrl_sys.lon.B)
+        # jax.debug.print("{}",grad)
+
         assert M_lon.shape == (12, 3)
         assert M_lat.shape == (11, 3)
-
+        # jax.debug.print("{}",M_lon)
+        # jax.debug.print("{}",ctrl_sys.lon.W)
+        # import ipdb; ipdb.set_trace()
         # (12, )
         out_lon = jnp.dot(M_lon, mdes_lon)
         # (11, )
@@ -228,7 +259,20 @@ class LCControl:
         assert surfCmd.shape == (5, 1)
         return surfCmd
 
+
+    def new_baseline(self, state: LCControlState, sensor: SensorNoAcc, ref_inputs: RefInputs, my_params):
+        Vel_blc, e_pos_blc, e_chi = self.convert_velocity_position_error_to_control_frame(sensor, ref_inputs)
+        X0, U0, ctrl_sys = self.new_scheduled_parameters(ref_inputs, my_params)
+        Xlon, Xlon_cmd, Xlat_cmd, Xlat = self.perturbation_variables_linear_control(
+            sensor, ref_inputs, Vel_blc, e_pos_blc, e_chi, X0
+        )
+
+        mdes_lon = self.dir_control_lon(state.int_e_long, ctrl_sys.lon, Xlon_cmd, Xlon)
+        mdes_lat = self.dir_control_lat(state.int_e_lat, ctrl_sys.lat, Xlat_cmd, Xlat)
+        return (X0, U0), ctrl_sys, (mdes_lon, mdes_lat), XLonLat(Xlon, Xlon_cmd, Xlat, Xlat_cmd)
+
     def baseline(self, state: LCControlState, sensor: SensorNoAcc, ref_inputs: RefInputs):
+        # import ipdb;ipdb.set_trace()
         Vel_blc, e_pos_blc, e_chi = self.convert_velocity_position_error_to_control_frame(sensor, ref_inputs)
         X0, U0, ctrl_sys = self.scheduled_parameters(ref_inputs)
         Xlon, Xlon_cmd, Xlat_cmd, Xlat = self.perturbation_variables_linear_control(
@@ -339,6 +383,31 @@ class LCControl:
 
         return Vel_blc, e_pos_blc, e_chi
 
+    def new_scheduled_parameters(self, ref_inputs: RefInputs, my_params) -> tuple[Vec12_1, Vec12_1, CtrlSys]:
+        Vel_blc_cmd = ref_inputs.Vel_bIc_des
+        ubar_cmd: FloatScalar = Vel_blc_cmd[0]
+        wbar_cmd: FloatScalar = Vel_blc_cmd[2]
+
+        CONDITION = self.REF_TRAJ_ON | self.FEEDBACK_CURRENT
+        in_1: FloatScalar = ubar_cmd if CONDITION else 0
+        in_2: FloatScalar = wbar_cmd if CONDITION else -8
+
+        # Lin interp in_1.
+        k_1, f_1 = get_lininterp_idx(in_1, self.mat["UH"].squeeze(-1))
+        k_2, f_2 = get_lininterp_idx(in_2, self.mat["WH"].squeeze(-1))
+
+        # (25, 26, 3)
+        table_data = self.mat["XU0_interp"]
+        m1 = matrix_interpolation(k_1, f_1, k_2, f_2, table_data)
+
+        m1 = jnp.transpose(m1)
+        X0 = m1[:12]
+        U0 = m1[12:]
+
+        ctrl_sys_lon = self.longtitudinal_ctrl_interpolation(k_1, f_1, k_2, f_2, my_params)
+        ctrl_sys_lat = self.lateral_ctrl_interpolation(k_1, f_1, k_2, f_2, my_params)
+        return X0, U0, CtrlSys(ctrl_sys_lon, ctrl_sys_lat)
+    
     def scheduled_parameters(self, ref_inputs: RefInputs) -> tuple[Vec12_1, Vec12_1, CtrlSys]:
         Vel_blc_cmd = ref_inputs.Vel_bIc_des
         ubar_cmd: FloatScalar = Vel_blc_cmd[0]
@@ -359,8 +428,9 @@ class LCControl:
         m1 = jnp.transpose(m1)
         X0 = m1[:12]
         U0 = m1[12:]
+
         ctrl_sys_lon = self.longtitudinal_ctrl_interpolation(k_1, f_1, k_2, f_2)
-        ctrl_sys_lat = self.lateral_ctrl_interpolation(k_1, f_1, k_2, f_2)
+        ctrl_sys_lat = self.lateral_ctrl_interpolation(k_1, f_1, k_2, f_2,)
         return X0, U0, CtrlSys(ctrl_sys_lon, ctrl_sys_lat)
 
     def create_allocation_bus(
@@ -384,7 +454,7 @@ class LCControl:
 
         W_lat = jnp.zeros((14, 14))
         W_lat = W_lat.at[:11, :11].set(ctrl_sys_lat.W)
-
+        
         eng_max = np.ones((9, 1)) * 350
         eng_min = np.ones((9, 1)) * (-1e-3)
         act_max = np.ones((5, 1)) * 0.5236
@@ -421,7 +491,7 @@ class LCControl:
             x0_trim=X0,
         )
 
-    def longtitudinal_ctrl_interpolation(self, k_1, f_1, k_2, f_2):
+    def longtitudinal_ctrl_interpolation(self, k_1, f_1, k_2, f_2, my_param = None):
         Ki = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["Ki_lon_interp"])
         Kx = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["Kx_lon_interp"])
         Kv = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["Kv_lon_interp"])
@@ -433,9 +503,19 @@ class LCControl:
         B = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["B_lon_interp"])
         Ap = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["Ap_lon_interp"])
         Bp = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["Bp_lon_interp"])
+
+        if my_param is not None:
+            # N_trim = W.shape[2]
+            # M_trim = W.shape[3]
+            # W = jnp.tile(jnp.diag(my_param['baseline_alloc']['W_lon'])[:,:,jnp.newaxis,jnp.newaxis],[1,1,N_trim,M_trim])
+            W = jnp.diag((my_param['baseline_alloc']['W_lon']))
+        else: 
+            # import ipdb; ipdb.set_trace()
+            W = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["W_lon_interp"])
+
         return Ctrl_Sys_Lon(Ki=Ki, Kx=Kx, Kv=Kv, F=F, G=G, C=C, Cv=Cv, W=W, B=B, Ap=Ap, Bp=Bp)
 
-    def lateral_ctrl_interpolation(self, k_1, f_1, k_2, f_2):
+    def lateral_ctrl_interpolation(self, k_1, f_1, k_2, f_2, my_param = None):
         Ki = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["Ki_lat_interp"])
         Kx = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["Kx_lat_interp"])
         Kv = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["Kv_lat_interp"])
@@ -447,4 +527,13 @@ class LCControl:
         B = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["B_lat_interp"])
         Ap = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["Ap_lat_interp"])
         Bp = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["Bp_lat_interp"])
+
+
+        if my_param is not None:
+            # N_trim = W.shape[2]
+            # M_trim = W.shape[2]
+            # W = jnp.tile(jnp.diag(my_param['baseline_alloc']['W_lat'])[:,:,jnp.newaxis,jnp.newaxis],[1,1,N_trim,M_trim])
+            W = jnp.diag((my_param['baseline_alloc']['W_lat']))
+
         return Ctrl_Sys_Lat(Ki=Ki, Kx=Kx, Kv=Kv, F=F, G=G, C=C, Cv=Cv, W=W, B=B, Ap=Ap, Bp=Bp)
+
