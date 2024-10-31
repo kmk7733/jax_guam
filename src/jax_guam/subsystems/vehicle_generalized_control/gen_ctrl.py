@@ -103,18 +103,18 @@ class L_C_control:
         sol_long_init = self.long_inte
         sol_long = solve_ivp(
             self.directional_control_long_inte,
-            [time, time + 0.005],
+            [time, time + 0.01],
             sol_long_init,
-            t_eval=[time + 0.005],
+            t_eval=[time + 0.01],
             method=BS5,
         )
 
         sol_lat_init = self.lat_inte
         sol_lat = solve_ivp(
             self.directional_control_lat_inte,
-            [time, time + 0.005],
+            [time, time + 0.01],
             sol_lat_init,
-            t_eval=[time + 0.005],
+            t_eval=[time + 0.01],
             method=BS5,
         )
         self.long_inte = sol_long.y.reshape(3)

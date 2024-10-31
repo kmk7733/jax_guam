@@ -71,7 +71,7 @@ class SurfEng:
         pos_ctrlsurf = self.pos_ctrlsurf
 
         deriv_fn = ft.partial(self._first_order_actuator_integral, ctrl_surf_cmd)
-        sol = solve_ivp(deriv_fn, [time, time + 0.005], pos_ctrlsurf, t_eval=[time + 0.005])
+        sol = solve_ivp(deriv_fn, [time, time + 0.01], pos_ctrlsurf, t_eval=[time + 0.01])
         y = sol.y.reshape(5)
         y_clipped = jnp.clip(y, self.POS_LO, self.POS_HI)
         not_saturated = y_clipped == y

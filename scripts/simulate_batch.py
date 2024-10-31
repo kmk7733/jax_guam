@@ -51,7 +51,7 @@ def main():
 
     bT_state = simulate_batch(b_state)
 
-    np.savez("bT_state_before_tune.npz", aircraft=bT_state.aircraft)
+    np.savez("bT_state_before_tune_dt_1e-2.npz", aircraft=bT_state.aircraft)
 
 if __name__ == "__main__":
     with ipdb.launch_ipdb_on_exception():

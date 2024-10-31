@@ -99,18 +99,18 @@ class Environment:
         return u_gust, v_gust, w_gust, self.memory_Large_step_warning
 
     def longitudinal_turbulence(self, selector, intensity, vel, alt):
-        dt = 0.005
+        dt = 0.01
         noise = random.uniform(key=self.key1) * dt  # TODO: need to generate?
         RMS_input = self.filter_parameters(selector, intensity, alt)
         mul = noise * RMS_input[0] * jnp.sqrt(3.141593 / dt)
         mul = mul - self.memory_mul * vel / RMS_input[1]
         self.memory_mul = 1 / mul
         u_gust = self.memory_mul * jnp.sqrt(2 / 3.141593 * vel / RMS_input[1])
-        Large_step_warnnig_flag = vel / RMS_input[1] * 0.005 > 0.11
+        Large_step_warnnig_flag = vel / RMS_input[1] * 0.01 > 0.11
         return u_gust, RMS_input[0], Large_step_warnnig_flag
 
     def lateral_turbulence(self, selector, intensity, vel, alt):
-        dt = 0.005
+        dt = 0.01
         noise = random.uniform(key=self.key1) * dt  # TODO: need to generate?
         RMS_input = self.filter_parameters(selector, intensity, alt)
         mul = noise * RMS_input[0] * jnp.sqrt(3.141593 / dt)
@@ -127,11 +127,11 @@ class Environment:
         mult_2 = plus_1 + self.memory_mul9
         w_gust = mult_2 * jnp.sqrt(3 / 3.141593 * vel / RMS_input[1])
 
-        Large_step_warnnig_flag = vel / RMS_input[1] * 0.005 > 0.11
+        Large_step_warnnig_flag = vel / RMS_input[1] * 0.01 > 0.11
         return w_gust, RMS_input[0], Large_step_warnnig_flag
 
     def vertical_turbulence(self, selector, intensity, vel, alt):
-        dt = 0.005
+        dt = 0.01
         noise = random.uniform(key=self.key1) * dt  # TODO: need to generate?
         RMS_input = self.filter_parameters(selector, intensity, alt)
         mul = noise * RMS_input[0] * jnp.sqrt(3.141593 / dt)
@@ -148,7 +148,7 @@ class Environment:
         mult_2 = plus_1 + self.memory_mul5
         v_gust = mult_2 * jnp.sqrt(3 / 3.141593 * vel / RMS_input[1])
 
-        Large_step_warnnig_flag = vel / RMS_input[1] * 0.005 > 0.11
+        Large_step_warnnig_flag = vel / RMS_input[1] * 0.01 > 0.11
         return v_gust, RMS_input[0], Large_step_warnnig_flag
 
     def filter_parameters(self, selector, intensity, alt):

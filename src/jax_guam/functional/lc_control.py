@@ -5,7 +5,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from attrs import define
-
+from scipy.linalg import solve, solve_continuous_are
 from jax_guam.data.read_data import read_data
 from jax_guam.guam_types import (
     Alloc,
@@ -42,6 +42,8 @@ from jax_guam.utils.jax_types import (
     Vec13_1,
 )
 from jax_guam.utils.paths import data_dir
+
+from .differentiabl_lqr import lqr_solution
 
 # only implemented baseline, no TRIM BASELINE_L1, BASELINE_AGI
 
@@ -432,7 +434,53 @@ class LCControl:
         ctrl_sys_lon = self.longtitudinal_ctrl_interpolation(k_1, f_1, k_2, f_2)
         ctrl_sys_lat = self.lateral_ctrl_interpolation(k_1, f_1, k_2, f_2,)
         return X0, U0, CtrlSys(ctrl_sys_lon, ctrl_sys_lat)
+    
+    def ctrl_lon(self, Q, R)->tuple:
 
+        Q = jnp.diag(Q)
+        R = jnp.diag(R)
+        Ki_lon_interp = jnp.zeros_like(self.mat["Ki_lon_interp"])
+
+        N_trim = self.mat["Ap_lon_interp"].shape[2]
+        M_trim = self.mat["Ap_lon_interp"].shape[3]
+
+        # Size definitions
+        Nx = 4
+        Ni = 3
+        Nr = 3
+        Nu = 11
+        Nv = 1
+        Nmu = 3
+        Nxi = 3
+
+        for i in range(N_trim):
+            for j in range(M_trim):
+                Alon = self.mat["Ap_lon_interp"][:, :, i, j]
+
+                Av = Alon[:3, :3]
+                Bv = jnp.eye(Nxi)
+                Cv = jnp.eye(Nxi)
+                Dv = jnp.zeros((Nxi, Nxi))
+
+                At = jnp.vstack(
+                    (jnp.hstack((jnp.zeros((Ni, Ni)), Cv)), jnp.hstack((jnp.zeros((Nxi, Ni)), Av)))
+                )
+                Bt = jnp.vstack((Dv, Bv))
+                # jax.debug.print("{}",At)
+                # jax.debug.print("{}", Bt)
+                Kc = lqr_solution(At, Bt, Q, R)
+                Ki0 = Kc[:, :Ni]
+                Kx0 = Kc[:, Ni : Ni + Nxi]
+                Kx = Kx0 @ jnp.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]])
+                Ki = Ki0
+
+                Ki_lon_interp=Ki_lon_interp.at[:,:,i,j].set( Ki)
+                jax.debug.print("{}", self.mat["Ki_lon_interp"][:, :, i, j])
+                jax.debug.print("{}", Ki)
+                # import ipdb; ipdb.set_trace()
+
+        return Ki_lon_interp
+    
     def create_allocation_bus(
         self,
         mdes: Vec6,
@@ -508,7 +556,14 @@ class LCControl:
             # N_trim = W.shape[2]
             # M_trim = W.shape[3]
             # W = jnp.tile(jnp.diag(my_param['baseline_alloc']['W_lon'])[:,:,jnp.newaxis,jnp.newaxis],[1,1,N_trim,M_trim])
-            W = jnp.diag((my_param['baseline_alloc']['W_lon']))
+            if 'baseline_alloc' in my_param.keys():
+                W = jnp.diag((my_param['baseline_alloc']['W_lon']))
+            if 'lqr' in my_param.keys():
+                Ki_lon_interp = self.ctrl_lon(my_param['lqr']['Q_lon'], my_param['lqr']['R_lon'])
+                # Ki = matrix_interpolation(k_1, f_1, k_2, f_2, Ki_lon_interp)
+                # Kx = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["Kx_lon_interp"])
+                # Kv = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["Kv_lon_interp"])     
+
         else: 
             # import ipdb; ipdb.set_trace()
             W = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["W_lon_interp"])
@@ -533,7 +588,8 @@ class LCControl:
             # N_trim = W.shape[2]
             # M_trim = W.shape[2]
             # W = jnp.tile(jnp.diag(my_param['baseline_alloc']['W_lat'])[:,:,jnp.newaxis,jnp.newaxis],[1,1,N_trim,M_trim])
-            W = jnp.diag((my_param['baseline_alloc']['W_lat']))
+            if 'baseline_alloc' in my_param.keys():
+                W = jnp.diag((my_param['baseline_alloc']['W_lat']))
 
         return Ctrl_Sys_Lat(Ki=Ki, Kx=Kx, Kv=Kv, F=F, G=G, C=C, Cv=Cv, W=W, B=B, Ap=Ap, Bp=Bp)
 

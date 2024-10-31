@@ -138,7 +138,7 @@ class VehicleEOMRef:
         # Integration.
         # state13 = self.initial_state13.reshape(13)
         deriv_fn = ft.partial(self.aircraft_6dof_integral, forcesmoments)
-        sol = solve_ivp(deriv_fn, [time, time + 0.005], state13, t_eval=[time + 0.005], method=BS5)
+        sol = solve_ivp(deriv_fn, [time, time + 0.01], state13, t_eval=[time + 0.01], method=BS5)
         # (13, n_points = 1) = (13, 1)
         self.state13 = sol.y
         assert self.state13.shape == (13, 1)
