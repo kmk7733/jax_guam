@@ -42,9 +42,8 @@ from jax_guam.utils.jax_types import (
     Vec13_1,
 )
 from jax_guam.utils.paths import data_dir
-
-from .differentiabl_lqr import lqr_solution
-
+from jax.tree_util import tree_map
+from .lqr import lqr_continuous_time_infinite_horizon
 # only implemented baseline, no TRIM BASELINE_L1, BASELINE_AGI
 
 # State of the longitudinal system. [ u; w; q; θ] = [ fwd_vel; up_vel; pitch rate; pitch ]
@@ -434,12 +433,70 @@ class LCControl:
         ctrl_sys_lon = self.longtitudinal_ctrl_interpolation(k_1, f_1, k_2, f_2)
         ctrl_sys_lat = self.lateral_ctrl_interpolation(k_1, f_1, k_2, f_2,)
         return X0, U0, CtrlSys(ctrl_sys_lon, ctrl_sys_lat)
-    
+
+    def ctrl_lat(self, Q, R)->tuple:
+
+        Q = jnp.diag(Q)
+        R = jnp.diag(R)
+
+        Ki_lat_interp = jnp.zeros_like(self.mat["Ki_lat_interp"])
+        Kx_lat_interp = jnp.zeros_like(self.mat["Kx_lat_interp"])
+
+        N_trim = self.mat["Ap_lat_interp"].shape[2]
+        M_trim = self.mat["Ap_lat_interp"].shape[3]
+
+        # Size definitions
+        Nx = 4
+        Ni = 3
+        Nr = 2
+        Nu = 10
+        Nv = 1
+        Nmu = 3
+        Nxi = 3
+
+        for i in range(N_trim):
+            for j in range(M_trim):
+                Alat = self.mat["Ap_lat_interp"][:, :, i, j]
+
+                Av = Alat[:3, :3]
+                Bv = jnp.eye(Nxi)
+                Cv = jnp.eye(Nxi)
+                Dv = jnp.zeros((Nxi, Nxi))
+
+                At = jnp.vstack(
+                    (jnp.hstack((jnp.zeros((Ni, Ni)), Cv)), jnp.hstack((jnp.zeros((Nxi, Ni)), Av)))
+                )
+                Bt = jnp.vstack((Dv, Bv))
+                # jax.debug.print("{}",At)
+                # jax.debug.print("{}", Bt)
+                Kc = lqr_continuous_time_infinite_horizon(At, Bt, Q, R)
+
+                Ki0 = Kc[:, :Ni]
+                Kx0 = Kc[:, Ni : Ni + Nxi]
+                Kx = Kx0 @ jnp.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]])
+
+                Ki = Ki0
+
+                Ki_lat_interp=Ki_lat_interp.at[:,:,i,j].set(Ki)
+                Kx_lat_interp=Kx_lat_interp.at[:,:,i,j].set(Kx)
+                # if i == 0 and j == 0:
+                #     jax.debug.print("provided Ki: {}", self.mat["Ki_lat_interp"][:, :, i, j])
+                #     jax.debug.print("computed Ki:{}", Ki)
+                #     jax.debug.print("provided Kx: {}", self.mat["Kx_lon_interp"][:, :, i, j])
+                #     jax.debug.print("computed Kx:{}", Kx)
+                # jax.debug.print("computed Ki:{}", Ki)
+                # import ipdb; ipdb.set_trace()
+                # jax.debug.print("{}",jnp.allclose(self.mat["Ki_lon_interp"][:, :, i, j], Ki, atol=1e-2, rtol=1e-2))
+                # import ipdb; ipdb.set_trace()
+
+        return Ki_lat_interp, Kx_lat_interp
+        
     def ctrl_lon(self, Q, R)->tuple:
 
         Q = jnp.diag(Q)
         R = jnp.diag(R)
         Ki_lon_interp = jnp.zeros_like(self.mat["Ki_lon_interp"])
+        Kx_lon_interp = jnp.zeros_like(self.mat["Kx_lon_interp"])
 
         N_trim = self.mat["Ap_lon_interp"].shape[2]
         M_trim = self.mat["Ap_lon_interp"].shape[3]
@@ -468,18 +525,27 @@ class LCControl:
                 Bt = jnp.vstack((Dv, Bv))
                 # jax.debug.print("{}",At)
                 # jax.debug.print("{}", Bt)
-                Kc = lqr_solution(At, Bt, Q, R)
+                Kc = lqr_continuous_time_infinite_horizon(At, Bt, Q, R)
+
                 Ki0 = Kc[:, :Ni]
                 Kx0 = Kc[:, Ni : Ni + Nxi]
                 Kx = Kx0 @ jnp.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]])
+
                 Ki = Ki0
 
-                Ki_lon_interp=Ki_lon_interp.at[:,:,i,j].set( Ki)
-                jax.debug.print("{}", self.mat["Ki_lon_interp"][:, :, i, j])
-                jax.debug.print("{}", Ki)
+                Ki_lon_interp=Ki_lon_interp.at[:,:,i,j].set(Ki)
+                Kx_lon_interp=Kx_lon_interp.at[:,:,i,j].set(Kx)
+                # if i == 1 and j == 0:
+                #     jax.debug.print("provided Ki: {}", self.mat["Ki_lon_interp"][:, :, i, j])
+                #     jax.debug.print("computed Ki:{}", Ki)
+                #     jax.debug.print("provided Kx: {}", self.mat["Kx_lon_interp"][:, :, i, j])
+                #     jax.debug.print("computed Kx:{}", Kx)
+                # jax.debug.print("computed Ki:{}", Ki)
+                # import ipdb; ipdb.set_trace()
+                # jax.debug.print("{}",jnp.allclose(self.mat["Ki_lon_interp"][:, :, i, j], Ki, atol=1e-2, rtol=1e-2))
                 # import ipdb; ipdb.set_trace()
 
-        return Ki_lon_interp
+        return Ki_lon_interp, Kx_lon_interp
     
     def create_allocation_bus(
         self,
@@ -559,8 +625,13 @@ class LCControl:
             if 'baseline_alloc' in my_param.keys():
                 W = jnp.diag((my_param['baseline_alloc']['W_lon']))
             if 'lqr' in my_param.keys():
-                Ki_lon_interp = self.ctrl_lon(my_param['lqr']['Q_lon'], my_param['lqr']['R_lon'])
+                Ki_lon_interp, Kx_lon_interp  = self.ctrl_lon(my_param['lqr']['Q_lon'], my_param['lqr']['R_lon'])
+                
+                Ki = matrix_interpolation(k_1, f_1, k_2, f_2, Ki_lon_interp)
+                Kx = matrix_interpolation(k_1, f_1, k_2, f_2, Kx_lon_interp)
                 # Ki = matrix_interpolation(k_1, f_1, k_2, f_2, Ki_lon_interp)
+
+                # import ipdb;ipdb.set_trace()
                 # Kx = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["Kx_lon_interp"])
                 # Kv = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["Kv_lon_interp"])     
 
@@ -590,6 +661,11 @@ class LCControl:
             # W = jnp.tile(jnp.diag(my_param['baseline_alloc']['W_lat'])[:,:,jnp.newaxis,jnp.newaxis],[1,1,N_trim,M_trim])
             if 'baseline_alloc' in my_param.keys():
                 W = jnp.diag((my_param['baseline_alloc']['W_lat']))
+            if 'lqr' in my_param.keys():
+                Ki_lat_interp, Kx_lat_interp  = self.ctrl_lat(my_param['lqr']['Q_lat'], my_param['lqr']['R_lat'])
+                
+                Ki = matrix_interpolation(k_1, f_1, k_2, f_2, Ki_lat_interp)
+                Kx = matrix_interpolation(k_1, f_1, k_2, f_2, Kx_lat_interp)
 
         return Ctrl_Sys_Lat(Ki=Ki, Kx=Kx, Kv=Kv, F=F, G=G, C=C, Cv=Cv, W=W, B=B, Ap=Ap, Bp=Bp)
 

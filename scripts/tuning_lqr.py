@@ -16,17 +16,17 @@ from jax_guam.utils.logging import set_logger_format
 from loguru import logger
 import matplotlib.pyplot as plt
 
+ctx = jax.default_device(jax.devices("cpu")[0])
+ctx.__enter__()
 
-
-# jax.config.update("jax_enable_x64", True)
 def main():
     # jax_use_cpu()
     # jax_use_double()
     set_logger_format()
     best_rmse = np.inf
     learning_rate = 1
-    final_time = 45.0
-    epoch_max = 1
+    final_time = 1.0
+    epoch_max = 10
     
     logger.info("Constructing GUAM...")
     guam = FuncGUAM()
@@ -54,8 +54,6 @@ def main():
         # Start profiling
         # jax.profiler.start_trace('profile_output')
         batch_size = 1
-        # batch_size = 8192
-        # batch_size = 16_384
         state = GuamState.create()
         b_state: GuamState = jtu.tree_map(lambda x: np.broadcast_to(x, (batch_size,) + x.shape).copy(), state)
 
@@ -104,10 +102,10 @@ def main():
         bT_state, _ = simulate_batch(b_state, my_param)
 
         # update my params
-        my_param['baseline_alloc']['W_lon'] -= learning_rate * grad_rmse['baseline_alloc']['W_lon']
-        my_param['baseline_alloc']['W_lat'] -= learning_rate * grad_rmse['baseline_alloc']['W_lat']
-        my_param['baseline_alloc']['W_lon'] = jnp.clip(my_param['baseline_alloc']['W_lon'], 0.1)
-        my_param['baseline_alloc']['W_lat'] = jnp.clip(my_param['baseline_alloc']['W_lat'], 0.1)
+        my_param['lqr']['Q_lon'] -= learning_rate * grad_rmse['lqr']['Q_lon']
+        my_param['lqr']['R_lon'] -= learning_rate * grad_rmse['lqr']['R_lon']
+        my_param['lqr']['Q_lon'] = jnp.clip(my_param['lqr']['Q_lon'], 0.1)
+        my_param['lqr']['R_lon'] = jnp.clip(my_param['lqr']['R_lon'], 0.1)
         rmse_history.append(rmse_val)
 
         # Stop profiling
