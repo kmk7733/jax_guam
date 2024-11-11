@@ -68,6 +68,9 @@ Mat3_11 = Float[Arr, "3 11"]
 Mat3_12 = Float[Arr, "3 12"]
 Mat6_14 = Float[Arr, "6 14"]
 Mat14 = Float[Arr, "14 14"]
+Mat15 = Float[Arr, "15 15"]
+
+Mat12_13 = Float[Arr, "12 13"]
 
 State = Float[Arr, "nx"]
 

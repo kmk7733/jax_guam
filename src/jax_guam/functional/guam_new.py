@@ -85,11 +85,12 @@ class FuncGUAM:
         env_data = self.env_data._replace(Atmosphere=atmosphere)
 
         control, cache = self.controller.new_get_control(state.controller, sensor, ref_inputs, my_param)
-
+        
         deriv_fn = ft.partial(self.new_deriv, ref_inputs=ref_inputs, control=control, cache=cache, env_data=env_data, aeroprop_body_data=aeroprop_body_data)
+        
         state_new = ode3(deriv_fn, dt, state)
         state_new = state_new._replace(surf_eng=self.surf_eng.clip_state(state_new.surf_eng))
-
+        
         return state_new
     
     def deriv(self, state: GuamState, ref_inputs: RefInputs) -> GuamState:

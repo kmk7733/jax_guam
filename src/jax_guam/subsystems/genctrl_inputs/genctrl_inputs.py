@@ -3,11 +3,11 @@ import numpy as np
 
 from jax_guam.guam_types import RefInputs
 from jax_guam.utils.batch_spline import get_spline
-
+import math
 
 def lift_cruise_reference_inputs(time):
     # return lift_cruise_reference_inputs_1(time)
-    return lift_cruise_reference_inputs_2(time)
+    return lift_cruise_reference_inputs_3(time)
 
 
 def lift_cruise_reference_inputs_1(time):
@@ -57,5 +57,35 @@ def lift_cruise_reference_inputs_2(time: float):
     pos_bii = spl_pos_bii(time / T_scale)
 
     assert vel_bIc.shape == (3,) and pos_bii.shape == (3,)
-
+    # import ipdb; ipdb.set_trace()
     return RefInputs(vel_bIc, pos_bii, Chi_des=np.array(0.0), Chi_dot_des=np.array(0.0))
+
+def lift_cruise_reference_inputs_3(time: float):
+    # Sinusoidal
+    # (5, )
+    T_t = np.arange(0, 21, 1)
+    # (5, 3)
+    # T_vel_bIc = np.array([[0, 0, -8], [20, 0, 0], [0, 20, 0], [-20, 0, 0], [0, 0, 0], [0, 0, 0]])
+    # (5, 3)
+    # T_pos_bii = np.array([[0, 0, 0], [0, 0, -80], [200, 0, -80], [200, 200, -80], [0, 200, -80], [0, 200, -80]])
+    T_pos_bii = np.vstack((T_t, 10*np.cos(2*np.pi/300*T_t), 10*np.sin(2*np.pi/300*T_t))).T
+    T_vel_bIc = np.vstack((np.ones(21), -10*(2*np.pi/300)*np.sin(2*np.pi/300*T_t), 10*(2*np.pi/300)*np.cos(2*np.pi/300*T_t))).T
+
+    Chi_des = np.zeros(21)
+    Chi_dot_des = np.zeros(21)
+    for i in range(len(T_t)):
+        Chi_des[i] = math.atan2(T_vel_bIc[i,1],T_vel_bIc[i,0])
+        if i > 0:
+            Chi_dot_des[i-1] = (Chi_des[i]-Chi_des[i-1])
+    # Chi_des[0] = 0
+
+    T_scale = T_t[-1]
+    spl_vel_bIc = get_spline(T_t / T_scale, T_vel_bIc, k=1, s=0)
+    spl_pos_bii = get_spline(T_t / T_scale, T_pos_bii, k=1, s=0)
+
+    vel_bIc = spl_vel_bIc(time / T_scale)
+    pos_bii = spl_pos_bii(time / T_scale)
+
+    assert vel_bIc.shape == (3,) and pos_bii.shape == (3,)
+    # import ipdb; ipdb.set_trace()
+    return RefInputs(vel_bIc, pos_bii, Chi_des=Chi_des[int(time / T_scale)], Chi_dot_des=Chi_dot_des[int(time / T_scale)])

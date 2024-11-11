@@ -16,6 +16,8 @@ from jax_guam.utils.jax_types import (
     Mat11,
     Mat12,
     Mat14,
+    Mat15,
+    Mat12_13,
     Mat31,
     Quat,
     Quat_1,
@@ -193,7 +195,8 @@ class AircraftState(NamedTuple):
 
     @staticmethod
     def GetDefault13() -> AircraftStateVec:
-        x = np.array([-0.00069017, 0, -8, 0, 0, 0, 0, 0, 0, 1, 0, -4.3136e-05, 0])
+        # x = np.array([-0.00069017, 0, -8, 0, 0, 0, 0, 0, 0, 1, 0, -4.3136e-05, 0])
+        x = np.array([0,0,0,0,0,0,0,10,0,1,0,0,0])
         assert x.shape == (13,)
         return x
 
@@ -447,7 +450,10 @@ class Ctrl_Sys_Lon(NamedTuple):
     # Note: following two matrices are not used.
     Ap: Mat4
     Bp: Mat4_11
-
+    # AGI
+    Afull: Mat12
+    Bfull: Mat12_13
+    W_agi: Mat15
 
 class Ctrl_Sys_Lat(NamedTuple):
     Ki: Mat3
@@ -464,7 +470,10 @@ class Ctrl_Sys_Lat(NamedTuple):
     # Note: following two matrices are not used.
     Ap: Mat4
     Bp: Mat4_11
-
+    # AGI
+    Afull: Mat12
+    Bfull: Mat12_13
+    W_agi: Mat15
 
 class CtrlSys(NamedTuple):
     lon: Ctrl_Sys_Lon

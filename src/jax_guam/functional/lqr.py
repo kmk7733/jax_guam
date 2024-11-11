@@ -7,6 +7,7 @@ from jax.numpy.linalg import solve
 from functools import partial
 import jax
 import ipdb
+# from .eig_util import eig
 ctx = jax.default_device(jax.devices("cpu")[0])
 ctx.__enter__()
 
@@ -25,6 +26,7 @@ def lqr_continuous_time_infinite_horizon(A, B, Q, R):
   # See https://en.wikipedia.org/wiki/Algebraic_Riccati_equation#Solution.
 
   H = jnp.block([[A1, -B @ jnp.linalg.inv(R)@B.T], [-Q1, -A1.T]])
+  # import ipdb; ipdb.set_trace()
   eigvals, eigvectors = eig(H)
   argsort = jnp.argsort(eigvals)
   ix = argsort[:x_dim]

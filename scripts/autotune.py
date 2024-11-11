@@ -1,4 +1,5 @@
 import functools as ft
+import functools as ft
 
 import gc
 import ipdb
@@ -16,23 +17,84 @@ from jax_guam.utils.logging import set_logger_format
 from loguru import logger
 import matplotlib.pyplot as plt
 import time
-# ctx = jax.default_device(jax.devices("cpu")[0])
-# ctx.__enter__()
+
+import copy
+
+ctx = jax.default_device(jax.devices("cpu")[0])
+ctx.__enter__()
+
+sigma_params = {
+    'baseline_alloc': {
+        'W_lon': jnp.array([0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,1,1,0.0001] ),
+        'W_lat': jnp.array([0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,1,1,0.01])
+    },
+    'lqr': {
+        'Q_lon': jnp.array([0.01, 0.01, 1]),
+        'R_lon': jnp.array([0.1] * 3),
+        'Q_lat': jnp.array([0.01, 1, 1]),
+        'R_lat': jnp.array([0.1] * 3)
+    }
+}
+
+def computeCost(t):
+    return jnp.exp(t)
+
+def acceptance(new_cost, prev_cost):
+    if new_cost < prev_cost:
+        return True
+    else:
+        accept = np.random.uniform(0, 1)
+        print(prev_cost/new_cost)
+        return (accept < (prev_cost/new_cost))
+
+def sample_gaussian_at_step(params, sigma = sigma_params, key = jax.random.PRNGKey(0)):
+    """
+    Sample from a Gaussian distribution centered at the parameter at each step.
+    
+    Args:
+        params (dict): Dictionary of initial parameters.
+        key (jax.random.PRNGKey): Random key for sampling.
+        sigma (dict): Dictionary of standard deviations with the same shape as the parameters.
+
+    Returns:
+        dict: Sampled parameters.
+    """
+    sampled_params = {}
+    
+    for key_param, value in params.items():
+        # print(key_param)
+        if key_param == 'lqr':
+            continue
+        if isinstance(value, dict):
+            sampled_params[key_param] = {}
+            for sub_key, sub_value in value.items():
+                if isinstance(sub_value, (np.ndarray, jnp.ndarray)):
+                    sub_key_rng, key = jax.random.split(key)
+                    noise = jax.random.normal(sub_key_rng, shape=sub_value.shape) * sigma[key_param][sub_key]
+                    sampled_params[key_param][sub_key] = sub_value + noise
+                else:
+                    sampled_params[key_param][sub_key] = sub_value
+        elif isinstance(value, (np.ndarray, jnp.ndarray)):
+            key_rng, key = jax.random.split(key)
+            noise = jax.random.normal(key_rng, shape=value.shape) * sigma[key_param]
+            sampled_params[key_param] = value + noise
+        else:
+            sampled_params[key_param] = value
+    
+    return sampled_params
 
 def main():
-    # jax_use_cpu()
+    jax_use_cpu()
     # jax_use_double()
     set_logger_format()
-    best_rmse = np.inf
-    learning_rate = 0.01
+    best_cost = np.inf
+    prev_cost = np.inf
+    new_cost = np.inf
+    count_acceptance = 0
     final_time = 20
-    epoch_max = 10
-    
-    logger.info("Constructing GUAM...")
-    guam = FuncGUAM()
-    logger.info("Calling GUAM...")
 
-    # my_param
+    epoch_max = 1
+        
     my_param = {
         # 'agi': {
         #     'W_agi': jnp.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, #omega 1-9
@@ -46,14 +108,22 @@ def main():
         #     'W_lat': jnp.array([1.5600196e+00, 9.0476894e-01, 1.1099764e+00, 1.0000000e-01, 1.3520601e+00, 1.4072037e+00, 5.7398933e-01, 8.1650019e-01, 1.0000000e+03, 1.0000000e+03, 9.8281962e-01])
         },
         'lqr': {
-            'Q_lon': np.array([0.01, 0.01, 1000.0]),
-            'R_lon': np.array([1.0, 1.0, 1.0]),
-            'Q_lat': np.array([0.01, 1000.0, 1000.0]),
-            'R_lat': np.array([1.0, 1.0, 1.0])
+            'Q_lon': np.array([1.9725220e-02, 4.5653448e-02, 9.9628168e+02]),
+            'R_lon': np.array([2.1794438 , 0.12229261, 1.4035431]),
+            'Q_lat': np.array([2.2229776e-02, 9.9960907e+02, 9.8621320e+02]),
+            'R_lat': np.array([1.6464634 , 0.95689696, 2.0273466])
+            # 'Q_lon': np.array([0.01, 0.01, 1000.0]),
+            # 'R_lon': np.array([1.0, 1.0, 1.0]),
+            # 'Q_lat': np.array([0.01, 1000.0, 1000.0]),
+            # 'R_lat': np.array([1.0, 1.0, 1.0])
         },
 
     }
-        
+
+    logger.info("Constructing GUAM...")
+    guam = FuncGUAM()
+    logger.info("Calling GUAM...")
+
     rmse_history = []
     for i in range(epoch_max):
         # Start profiling
@@ -91,72 +161,40 @@ def main():
             bT_state = jtu.tree_map(lambda *args: jnp.stack(list(args), axis=1), *Tb_state)
             rmse = jnp.sqrt(rmse / T)
             return bT_state, rmse
-
-        # Wrapper to compute only RMSE for gradient computation
-        def rmse_only(b_state0, my_param):
-            _, rmse = simulate_batch(b_state0, my_param)  # We only need RMSE for the gradient
-            return rmse
-
-        # Compute both RMSE and the gradient with respect to my_param in one pass
-        rmse_val, grad_rmse = jax.value_and_grad(rmse_only, argnums=1)(b_state, my_param)
-
+        
         # Now you have both the RMSE value and the gradient with respect to my_param
-        print(f"RMSE: {rmse_val}")
-        # print(f"Gradient of RMSE with respect to my_param: {grad_rmse}")
 
         # If you also need the state, you can reuse it without recomputation
-        bT_state, _ = simulate_batch(b_state, my_param)
-
-        # update my params
-        my_param['lqr']['Q_lon'] -= learning_rate * grad_rmse['lqr']['Q_lon']
-        my_param['lqr']['R_lon'] -= learning_rate * grad_rmse['lqr']['R_lon']
-        my_param['lqr']['Q_lat'] -= learning_rate * grad_rmse['lqr']['Q_lat']
-        my_param['lqr']['R_lat'] -= learning_rate * grad_rmse['lqr']['R_lat']
-        my_param['baseline_alloc']['W_lon'] -= learning_rate * grad_rmse['baseline_alloc']['W_lon']
-        my_param['baseline_alloc']['W_lat'] -= learning_rate * grad_rmse['baseline_alloc']['W_lat']
+        bT_state, rmse = simulate_batch(b_state, my_param)
+        new_cost = computeCost(rmse)
         
-        my_param['baseline_alloc']['W_lon'] = jnp.clip(my_param['baseline_alloc']['W_lon'], min = 0.1)
-        my_param['baseline_alloc']['W_lat'] = jnp.clip(my_param['baseline_alloc']['W_lat'], min = 0.1)
-        my_param['lqr']['Q_lon'] = jnp.clip(my_param['lqr']['Q_lon'], min = 0.1)
-        my_param['lqr']['R_lon'] = jnp.clip(my_param['lqr']['R_lon'], min = 0.1)
-        my_param['lqr']['Q_lat'] = jnp.clip(my_param['lqr']['Q_lat'], min = 0.1)
-        my_param['lqr']['R_lat'] = jnp.clip(my_param['lqr']['R_lat'], min = 0.1)
+        print(rmse)
+        if i == 0 :
+            prev_cost = new_cost
+            prev_param= copy.deepcopy(my_param)
+            # print(prev_cost)
+        else:
+            if acceptance(new_cost, prev_cost):
+                prev_cost = new_cost
+                prev_param = copy.deepcopy(my_param)
+                count_acceptance += 1
+                print("Acceptance rate: ", str(count_acceptance/epoch_max*100))
+            else:
+                print("Rejected configuration at iteration ", str(i))
 
-        rmse_history.append(rmse_val)
+        if best_cost>prev_cost:
+            best_cost=prev_cost
+            best_param=prev_param
+        my_param = sample_gaussian_at_step(my_param)
 
-        # Stop profiling
-        # jax.profiler.stop_trace() # tensorboard --logdir=profile_output
-        print(f"new param: {my_param}")
-        
-        jax.clear_caches()
-        gc.collect()
-        print("Time taken for 1 epoch ", time.time()-start)
-        # Stop learning
-        if i >0:
-            if best_rmse > rmse_history[-1]:
-                best_rmse = rmse_history[-1]
-                print('BEST RMSE so far: ', best_rmse)
-                best_param = my_param
-            if abs(rmse_history[-1] - rmse_history[-2]) < 1e-3:
-                rmse_history
-                break
-            if rmse_history[-1] - rmse_history[-2] > 1:
-                break
-    # # Store the state and RMSE from the first run
-    # bT_state, rmse = simulate_batch(b_state, my_param)
+        # print(best_cost)
+        print(my_param)
+        rmse_history.append(rmse)
 
-    # # Compute the gradient of RMSE
-    # grad_rmse = jax.grad(lambda b_state0, my_param: rmse)(b_state, my_param)
-
-    np.savez("bT_state.npz", aircraft=bT_state.aircraft)
-    np.savez("Pos_des.npz", pos_des)
-    np.savez("Best_param.npz", best_param)
-
-    # Plot the real and desired trajectories for x, y, z
+    # Plot loss history
     bT_positions = bT_state.aircraft[:, :, 6:9]  # Extract real positions from state (assuming aircraft positions are in [6:9])
-    pos_des_np = np.array(pos_des)  # Convert desired positions to numpy array
+    pos_des_np = np.array(pos_des)
 
-    # Plot x, y, z for real and desired positions
     plt.figure(figsize=(12, 6))
     labels = ['x', 'y', 'z']
     for i in range(3):
@@ -171,7 +209,6 @@ def main():
     plt.tight_layout()
     plt.show()
 
-    # Plot loss history
     plt.plot(rmse_history)
     plt.xlabel('Iteration')
     plt.ylabel('RMSE')
