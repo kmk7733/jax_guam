@@ -18,7 +18,7 @@ def main():
     jax_use_double()
     set_logger_format()
 
-    final_time = 20.0
+    final_time = 40.0
 
     logger.info("Constructing GUAM...")
     guam = FuncGUAM()

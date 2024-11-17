@@ -53,7 +53,7 @@ class Environment:
         self.Env = EnvData(Wind=self.wind, Turbulence=self.turbulence, Atmosphere=self.atmosphere)
 
     def get_env_atmosphere(self, AltMSL: FloatScalar) -> Atmosphere:
-        dt = 0
+        dt = 0.01
         atmos = atmos76(AltMSL, dt)
         atmosphere = Atmosphere(Density=atmos[0], Pressure=atmos[1], Temperature=atmos[2], SpeedOfSound=atmos[3])
         return atmosphere
@@ -63,7 +63,7 @@ class Environment:
         self.atmosphere = atmosphere
 
     def environment_atmosphere(self, eom: EOM):
-        dt = 0
+        dt = 0.01
         AltMSL = eom.WorldRelativeData.AltMSL
         atmos = atmos76(AltMSL, dt)
         self.atmosphere = Atmosphere(

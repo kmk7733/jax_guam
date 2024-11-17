@@ -88,8 +88,8 @@ class LCControlCfg:
 
 class LCControl:
     def __init__(self, cfg: LCControlCfg = LCControlCfg()):
-        # self.mat = read_data(data_dir() / "trim_table.mat")
-        self.mat = read_data(data_dir() / "trim_table_SFN_ConcatVer3p0.mat")
+        self.mat = read_data(data_dir() / "trim_table.mat")
+        # self.mat = read_data(data_dir() / "trim_table_SFN_ConcatVer3p0.mat")
 
         self.REF_TRAJ_ON = cfg.ref_traj_on
         self.FEEDBACK_CURRENT = cfg.feedback_current
@@ -108,8 +108,8 @@ class LCControl:
         # 2: (Ignore adaptive)
 
         # 3: Allocate controls
-        eng_cmd, surf_cmd, feedback, u_alloc = self.pseudo_inverse_control_alloc(XU0, ctrl_sys, mdes)
         # _, _, _, _ = self.agi_alloc(XU0, ctrl_sys, mdes)
+        eng_cmd, surf_cmd, feedback, u_alloc = self.pseudo_inverse_control_alloc(XU0, ctrl_sys, mdes)
 
         # print(jnp.allclose, actual, expected)
         # _, _, _, _ = self.agi_alloc(XU0, ctrl_sys, mdes)
@@ -235,13 +235,13 @@ class LCControl:
         # Translate traditional aircraft commands to the lift+cruise ones.
         eng_cmd = self.engine_command(om_r, om_p, U0)
         SurfCmd = self.surface_command(dela, delf, dele, delr, U0)
-
+        # jax.debug.print("AGI {}", eng_cmd)
         Cmd = out[:10]
         # import ipdb; ipdb.set_trace()
         u_alloc = self.create_agi_allocation_bus(jnp.concatenate(mdes), ctrl_sys.lon, ctrl_sys.lat, Cmd, U0, X0)
         # pdb.set_trace()
         feedback = jnp.array([theta, phi])
-        
+        jax.debug.print("AGI {}", dele)
         return eng_cmd, SurfCmd, feedback, u_alloc
     
     def pseudo_inverse_control_alloc(self, XU0: tuple[Vec12_1, Vec13_1], ctrl_sys: CtrlSys, mdes: tuple[Vec3, Vec3]):
@@ -284,10 +284,11 @@ class LCControl:
         # Translate traditional aircraft commands to the lift+cruise ones.
         eng_cmd = self.engine_command(om_r, om_p, U0)
         SurfCmd = self.surface_command(dela, delf, dele, delr, U0)
-
+        # jax.debug.print("{}", eng_cmd)
         u_alloc = self.create_allocation_bus(jnp.concatenate(mdes), ctrl_sys.lon, ctrl_sys.lat, u_lon, u_lat, U0, X0)
         # pdb.set_trace()
         feedback = jnp.array([theta, phi])
+        # jax.debug.print("{}", dele)
         return eng_cmd, SurfCmd, feedback, u_alloc
 
     def engine_command(self, om_r: Vec8, om_p: FloatScalar, U0: Vec13_1) -> EngineControl_1:
@@ -651,14 +652,14 @@ class LCControl:
         act_max = np.ones((5, 1)) * 0.5236
         act_min = np.ones((5, 1)) * (-0.5236)
         u_agi = jnp.zeros((14, 1)) # Change this to AGI using sum of mdes
-        u_agi = u_agi.at[:9].set(Cmd[:9].reshape((9, 1)))
-        u_agi = u_agi.at[9].set(Cmd[8])
-        u_agi = u_agi.at[10].set(-Cmd[8])
-        u_agi = u_agi.at[11].set(Cmd[9])
-        u_agi = u_agi.at[12].set(Cmd[9])
-        u_agi = u_agi.at[13].set(Cmd[9])
+        # u_agi = u_agi.at[:9].set(Cmd[:9].reshape((9, 1)))
+        # u_agi = u_agi.at[9].set(Cmd[8])
+        # u_agi = u_agi.at[10].set(-Cmd[8])
+        # u_agi = u_agi.at[11].set(Cmd[9])
+        # u_agi = u_agi.at[12].set(Cmd[9])
+        # u_agi = u_agi.at[13].set(Cmd[9])
 
-        jax.debug.print("create_agi_allocation_bus {}", u_agi)
+        # jax.debug.print("create_agi_allocation_bus {}", u_agi[0])
 
         assert mdes.shape == (6,)
         return Alloc(
@@ -710,15 +711,15 @@ class LCControl:
 
         u_agi = jnp.zeros((14, 1)) # Change this to AGI using sum of mdes
         
-        value_sum = u_lon[:8] + u_lat[:8]
-        u_agi = u_agi.at[:8].set(value_sum.reshape((8, 1)))
-        u_agi = u_agi.at[8].set(u_lon[8])
-        u_agi = u_agi.at[9].set(u_lat[8])
-        u_agi = u_agi.at[10].set(-u_lat[8])
-        u_agi = u_agi.at[11].set(u_lon[9])
-        u_agi = u_agi.at[12].set(u_lon[9])
-        u_agi = u_agi.at[13].set(u_lat[9])
-        # jax.debug.print("{}", u_agi)
+        # value_sum = u_lon[:8] + u_lat[:8]
+        # u_agi = u_agi.at[:8].set(value_sum.reshape((8, 1)))
+        # u_agi = u_agi.at[8].set(u_lon[8])
+        # u_agi = u_agi.at[9].set(u_lat[8])
+        # u_agi = u_agi.at[10].set(-u_lat[8])
+        # u_agi = u_agi.at[11].set(u_lon[9])
+        # u_agi = u_agi.at[12].set(u_lon[9])
+        # u_agi = u_agi.at[13].set(u_lat[9])
+        # jax.debug.print("{}", u_agi[0])
         assert mdes.shape == (6,)
         return Alloc(
             mdes=mdes,
@@ -752,8 +753,8 @@ class LCControl:
         B = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["B_lon_interp"])
         Ap = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["Ap_lon_interp"])
         Bp = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["Bp_lon_interp"])
-        Afull = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["A_full_interp"])
-        Bfull = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["B_full_interp"])
+        # Afull = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["A_full_interp"])
+        # Bfull = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["B_full_interp"])
         W_agi = jnp.zeros((15,15))
 
         if my_param is not None:
@@ -774,7 +775,7 @@ class LCControl:
         #     # import ipdb; ipdb.set_trace()
         #     W = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["W_lon_interp"])
 
-        return Ctrl_Sys_Lon(Ki=Ki, Kx=Kx, Kv=Kv, F=F, G=G, C=C, Cv=Cv, W=W, B=B, Ap=Ap, Bp=Bp, Afull=Afull, Bfull=Bfull, W_agi=W_agi)
+        return Ctrl_Sys_Lon(Ki=Ki, Kx=Kx, Kv=Kv, F=F, G=G, C=C, Cv=Cv, W=W, B=B, Ap=Ap, Bp=Bp, W_agi=W_agi)
 
     def lateral_ctrl_interpolation(self, k_1, f_1, k_2, f_2, my_param = None):
         Ki = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["Ki_lat_interp"])
@@ -788,8 +789,8 @@ class LCControl:
         B = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["B_lat_interp"])
         Ap = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["Ap_lat_interp"])
         Bp = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["Bp_lat_interp"])
-        Afull = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["A_full_interp"])
-        Bfull = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["B_full_interp"])
+        # Afull = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["A_full_interp"])
+        # Bfull = matrix_interpolation(k_1, f_1, k_2, f_2, self.mat["B_full_interp"])
         W_agi = jnp.zeros((15,15))
         # W_agi = jnp.diag(np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, #omega 1-9
         #                         10000000.0, 1000.0, 1000.0, 1000.0, #delf dela dele delr
@@ -809,5 +810,5 @@ class LCControl:
                 Ki = matrix_interpolation(k_1, f_1, k_2, f_2, Ki_lat_interp)
                 Kx = matrix_interpolation(k_1, f_1, k_2, f_2, Kx_lat_interp)
 
-        return Ctrl_Sys_Lat(Ki=Ki, Kx=Kx, Kv=Kv, F=F, G=G, C=C, Cv=Cv, W=W, B=B, Ap=Ap, Bp=Bp, Afull = Afull, Bfull=Bfull, W_agi=W_agi)
+        return Ctrl_Sys_Lat(Ki=Ki, Kx=Kx, Kv=Kv, F=F, G=G, C=C, Cv=Cv, W=W, B=B, Ap=Ap, Bp=Bp, W_agi=W_agi)
 

@@ -196,7 +196,7 @@ class AircraftState(NamedTuple):
     @staticmethod
     def GetDefault13() -> AircraftStateVec:
         # x = np.array([-0.00069017, 0, -8, 0, 0, 0, 0, 0, 0, 1, 0, -4.3136e-05, 0])
-        x = np.array([0,0,0,0,0,0,0,10,0,1,0,0,0])
+        x = np.array([1,0,0.2094,0,0,0,0,10,0,1,0,0,-0.0011])
         assert x.shape == (13,)
         return x
 
@@ -451,8 +451,8 @@ class Ctrl_Sys_Lon(NamedTuple):
     Ap: Mat4
     Bp: Mat4_11
     # AGI
-    Afull: Mat12
-    Bfull: Mat12_13
+    # Afull: Mat12
+    # Bfull: Mat12_13
     W_agi: Mat15
 
 class Ctrl_Sys_Lat(NamedTuple):
@@ -471,8 +471,8 @@ class Ctrl_Sys_Lat(NamedTuple):
     Ap: Mat4
     Bp: Mat4_11
     # AGI
-    Afull: Mat12
-    Bfull: Mat12_13
+    # Afull: Mat12
+    # Bfull: Mat12_13
     W_agi: Mat15
 
 class CtrlSys(NamedTuple):

@@ -77,7 +77,8 @@ def lift_cruise_reference_inputs_3(time: float):
         Chi_des[i] = math.atan2(T_vel_bIc[i,1],T_vel_bIc[i,0])
         if i > 0:
             Chi_dot_des[i-1] = (Chi_des[i]-Chi_des[i-1])
-    # Chi_des[0] = 0
+    # Chi_des[0] = 0.002
+    # Chi_dot_des[0] = -0.002
 
     T_scale = T_t[-1]
     spl_vel_bIc = get_spline(T_t / T_scale, T_vel_bIc, k=1, s=0)

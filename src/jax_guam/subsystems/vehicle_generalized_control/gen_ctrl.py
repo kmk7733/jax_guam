@@ -60,8 +60,8 @@ XLatCmd = Vec3_1
 
 class L_C_control:
     def __init__(self):
-        # self.mat = read_data(data_dir() / "trim_table.mat")
-        self.mat = read_data(data_dir() / "trim_table_SFN_ConcatVer3p0.mat")
+        self.mat = read_data(data_dir() / "trim_table.mat")
+        # self.mat = read_data(data_dir() / "trim_table_SFN_ConcatVer3p0.mat")
 
         # self.feedback = [None, None]  Note: Not needed as a state.
         self.long_inte = jnp.array([0, 0, 0])

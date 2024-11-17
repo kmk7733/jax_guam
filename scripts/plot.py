@@ -13,7 +13,7 @@ def main():
     b, T, _ = bT_state.shape
     bT_pos = bT_state[:, :, 6:9]
 
-    dt = 0.005
+    dt = 0.01
     T_t = np.arange(T) * dt * 10
     bT_t = np.broadcast_to(T_t, (b, T))
 
@@ -35,7 +35,7 @@ def main():
     line_col = LineCollection(bT_pos[:, :, :2][:, :, ::-1], color="C1", lw=0.01, alpha=1)
     ax.add_collection(line_col)
     ax.autoscale_view()
-    # ax.set_aspect("equal")
+    ax.set_aspect("equal")
     ax.set(xlabel="East [ft]", ylabel="North [ft]")
     fig.savefig("batch_traj2d_square.pdf")
 

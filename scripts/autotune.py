@@ -24,9 +24,12 @@ ctx = jax.default_device(jax.devices("cpu")[0])
 ctx.__enter__()
 
 sigma_params = {
+    # 'agi': {
+    #     'W_agi': jnp.array([0.01]*15), #theta phi
+    #     },
     'baseline_alloc': {
-        'W_lon': jnp.array([0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,1,1,0.0001] ),
-        'W_lat': jnp.array([0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,1,1,0.01])
+        'W_lon': jnp.array([0.01]*12 ),
+        'W_lat': jnp.array([0.01]*11)
     },
     'lqr': {
         'Q_lon': jnp.array([0.01, 0.01, 1]),
@@ -83,7 +86,7 @@ def sample_gaussian_at_step(params, sigma = sigma_params, key = jax.random.PRNGK
     
     return sampled_params
 
-def main():
+def main(path, itr):
     jax_use_cpu()
     # jax_use_double()
     set_logger_format()
@@ -93,7 +96,7 @@ def main():
     count_acceptance = 0
     final_time = 20
 
-    epoch_max = 1
+    epoch_max = 10
         
     my_param = {
         # 'agi': {
@@ -102,20 +105,20 @@ def main():
         #                         0.1, 1.0]), #theta phi
         # },
         'baseline_alloc': {
-            'W_lon': jnp.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1000.0, 10000000.0, 0.1]), #[omega 1-9 dele delf theta]
-            'W_lat': np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1000.0, 1000.0, 1.0])  #[omega 1-8 dela delr phi]
+            'W_lon': jnp.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]), #[omega 1-9 dele delf theta]
+            'W_lat': np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])  #[omega 1-8 dela delr phi]
         #     'W_lon': jnp.array([1.5358679e+00, 8.3843321e-01, 1.2812005e+00, 1.0000000e-01, 1.0000000e-01, 4.8056790e-01, 1.4986095e+00, 1.5526563e+00, 1.0000000e+00, 1.0000000e+03, 1.0000000e+07, 1.0168679e-01]),
         #     'W_lat': jnp.array([1.5600196e+00, 9.0476894e-01, 1.1099764e+00, 1.0000000e-01, 1.3520601e+00, 1.4072037e+00, 5.7398933e-01, 8.1650019e-01, 1.0000000e+03, 1.0000000e+03, 9.8281962e-01])
         },
         'lqr': {
-            'Q_lon': np.array([1.9725220e-02, 4.5653448e-02, 9.9628168e+02]),
-            'R_lon': np.array([2.1794438 , 0.12229261, 1.4035431]),
-            'Q_lat': np.array([2.2229776e-02, 9.9960907e+02, 9.8621320e+02]),
-            'R_lat': np.array([1.6464634 , 0.95689696, 2.0273466])
-            # 'Q_lon': np.array([0.01, 0.01, 1000.0]),
-            # 'R_lon': np.array([1.0, 1.0, 1.0]),
-            # 'Q_lat': np.array([0.01, 1000.0, 1000.0]),
-            # 'R_lat': np.array([1.0, 1.0, 1.0])
+            # 'Q_lon': np.array([1.9725220e-02, 4.5653448e-02, 9.9628168e+02]),
+            # 'R_lon': np.array([2.1794438 , 0.12229261, 1.4035431]),
+            # 'Q_lat': np.array([2.2229776e-02, 9.9960907e+02, 9.8621320e+02]),
+            # 'R_lat': np.array([1.6464634 , 0.95689696, 2.0273466])
+            'Q_lon': np.array([0.01, 0.01, 1000.0]),
+            'R_lon': np.array([1.0, 1.0, 1.0]),
+            'Q_lat': np.array([0.01, 1000.0, 1000.0]),
+            'R_lat': np.array([1.0, 1.0, 1.0])
         },
 
     }
@@ -185,35 +188,47 @@ def main():
         if best_cost>prev_cost:
             best_cost=prev_cost
             best_param=prev_param
-        my_param = sample_gaussian_at_step(my_param)
+        
 
         # print(best_cost)
-        print(my_param)
+        
         rmse_history.append(rmse)
 
+        if i != epoch_max-1:
+            print(my_param)
+            my_param = sample_gaussian_at_step(my_param)
+
+    np.savez(path+"Last_param_"+str(itr)+".npz", my_param)
+    np.savez(path+"Best_param_"+str(itr)+".npz", best_param)
+    np.savez(path+"rmse_history_"+str(itr)+".npz", rmse_history)
+
     # Plot loss history
-    bT_positions = bT_state.aircraft[:, :, 6:9]  # Extract real positions from state (assuming aircraft positions are in [6:9])
-    pos_des_np = np.array(pos_des)
+    # bT_positions = bT_state.aircraft[:, :, 6:9]  # Extract real positions from state (assuming aircraft positions are in [6:9])
+    # pos_des_np = np.array(pos_des)
 
-    plt.figure(figsize=(12, 6))
-    labels = ['x', 'y', 'z']
-    for i in range(3):
-        plt.subplot(3, 1, i+1)
-        plt.plot(bT_positions[0, :, i], label=f'Real {labels[i]}')
-        plt.plot(pos_des_np[:, i], label=f'Desired {labels[i]}', linestyle='--')
-        plt.legend()
-        plt.title(f'{labels[i]} component of trajectory')
-        plt.xlabel('Time step')
-        plt.ylabel(f'{labels[i]} position')
+    # plt.figure(figsize=(12, 6))
+    # labels = ['x', 'y', 'z']
+    # for i in range(3):
+    #     plt.subplot(3, 1, i+1)
+    #     plt.plot(bT_positions[0, :, i], label=f'Real {labels[i]}')
+    #     plt.plot(pos_des_np[:, i], label=f'Desired {labels[i]}', linestyle='--')
+    #     plt.legend()
+    #     plt.title(f'{labels[i]} component of trajectory')
+    #     plt.xlabel('Time step')
+    #     plt.ylabel(f'{labels[i]} position')
 
-    plt.tight_layout()
-    plt.show()
+    # plt.tight_layout()
+    # plt.show()
 
-    plt.plot(rmse_history)
-    plt.xlabel('Iteration')
-    plt.ylabel('RMSE')
-    plt.show()
+    # plt.plot(rmse_history)
+    # plt.xlabel('Iteration')
+    # plt.ylabel('RMSE')
+    # plt.show()
 
 if __name__ == "__main__":
+
+    
     with ipdb.launch_ipdb_on_exception():
-        main()
+        for itr in range(10):
+            path = "/home/mk/research/guam/jax_guam/autotune/sinusoidal/alloc/"
+            main(path, itr)
