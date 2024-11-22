@@ -195,8 +195,9 @@ class AircraftState(NamedTuple):
 
     @staticmethod
     def GetDefault13() -> AircraftStateVec:
-        # x = np.array([-0.00069017, 0, -8, 0, 0, 0, 0, 0, 0, 1, 0, -4.3136e-05, 0])
-        x = np.array([1,0,0.2094,0,0,0,0,10,0,1,0,0,-0.0011])
+        x = np.array([0, 0, -8, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0])
+        # x = np.array([1,0,0.2094,0,0,0,0,10,0,1,0,0,-0.0011])
+        # x = np.array([1,0,0.2094,0,0,0,0,10,0,1,0,0,-0.0011])
         assert x.shape == (13,)
         return x
 
