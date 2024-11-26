@@ -28,8 +28,8 @@ ctx.__enter__()
 
 sigma_params = {
     'baseline_alloc': {
-        'W_lon': jnp.array([0.01]*12 ),
-        'W_lat': jnp.array([0.01]*11)
+        'W_lon': jnp.array([0.05]*12 ),
+        'W_lat': jnp.array([0.05]*11)
     },
     'lqr': {
         'Q_lon': jnp.array([0.001, 0.001, 10]),
@@ -92,7 +92,7 @@ def main(path, itr,pass_param):
     prev_cost = np.inf
     new_cost = np.inf
     count_acceptance = 0
-    final_time = 40
+    final_time = 50
 
     epoch_max = 10
         
@@ -189,9 +189,9 @@ def main(path, itr,pass_param):
     
 if __name__ == "__main__":
 
-    case = 'alloc_lqr'
-    trajectory = 'hover_to_cruise'
-    path = "/home/mk/research/guam/jax_guam/autotune/"+trajectory+"/"+case+"/"
+    case = 'alloc'
+    trajectory = 'hover_to_rectangle'
+    path = "/home/mk/research/guam/jax_guam/autotune_new/"+trajectory+"/"+case+"/"
 
     if case == 'lqr':
         pass_param = 'baseline_alloc'

@@ -7,7 +7,7 @@ import math
 
 def lift_cruise_reference_inputs(time):
     # return lift_cruise_reference_inputs_1(time)
-    return lift_cruise_reference_inputs_1(time)
+    return lift_cruise_reference_inputs_2(time)
 
 
 def lift_cruise_reference_inputs_1(time):
